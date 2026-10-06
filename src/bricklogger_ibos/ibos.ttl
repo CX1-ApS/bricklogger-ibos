@@ -1,0 +1,104 @@
+@prefix ibos: <https://brick.cx2.dk/schema/ibos#> .
+@prefix ref: <https://brickschema.org/schema/Brick/ref#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# The iBOS vocabulary for Brick: how a Brick point refers to an object in the
+# iBOS cloud, the building automation data service of iBOS Technologies. A
+# small extension of Brick's reference schema, written for Bricklogger and
+# usable by any Brick tool. The namespace is an identifier; the document
+# ships in the bricklogger-ibos package.
+
+<https://brick.cx2.dk/schema/ibos> a owl:Ontology ;
+    rdfs:label "iBOS vocabulary for Brick" ;
+    rdfs:comment "How a Brick point refers to an object in the iBOS cloud: the object's UUID and the project it belongs to, with informational properties describing the object as iBOS knows it. Extends Brick's reference schema."@en ;
+    owl:versionInfo "1.0" .
+
+# --- Classes ------------------------------------------------------------------
+
+ibos:Reference a owl:Class ;
+    rdfs:label "iBOS reference" ;
+    rdfs:subClassOf ref:ExternalReference ;
+    skos:definition "A reference from a Brick point to an object in the iBOS cloud, identified by the object's UUID and the project it belongs to."@en .
+
+ibos:Project a owl:Class ;
+    rdfs:label "iBOS project" ;
+    skos:definition "A project in iBOS: a site whose devices report to the cloud. The node may also be the building or site itself."@en .
+
+# --- Properties of the reference ---------------------------------------------
+
+ibos:object-uuid a owl:DatatypeProperty ;
+    rdfs:label "object-uuid" ;
+    rdfs:range xsd:string ;
+    skos:definition "The UUID of the object in iBOS, the key under which the API serves everything about it. Required."@en .
+
+ibos:project a owl:ObjectProperty ;
+    rdfs:label "project" ;
+    rdfs:range ibos:Project ;
+    skos:definition "The iBOS project the object belongs to. Required."@en .
+
+ibos:object-type a owl:DatatypeProperty ;
+    rdfs:label "object-type" ;
+    rdfs:range xsd:string ;
+    skos:definition "The BACnet object type of the object in the standard's hyphenated spelling, e.g. analog-input. Informational; a source checks it against the API."@en .
+
+ibos:object-instance a owl:DatatypeProperty ;
+    rdfs:label "object-instance" ;
+    rdfs:range xsd:integer ;
+    skos:definition "The BACnet instance number of the object. Informational; a source checks it against the API."@en .
+
+ibos:object-name a owl:DatatypeProperty ;
+    rdfs:label "object-name" ;
+    rdfs:range xsd:string ;
+    skos:definition "The object's name in iBOS. Informational."@en .
+
+ibos:device-uuid a owl:DatatypeProperty ;
+    rdfs:label "device-uuid" ;
+    rdfs:range xsd:string ;
+    skos:definition "The UUID of the device the object belongs to. Informational."@en .
+
+# --- Properties of the project -----------------------------------------------
+
+ibos:project-id a owl:DatatypeProperty ;
+    rdfs:label "project-id" ;
+    rdfs:range xsd:integer ;
+    skos:definition "The project's number in iBOS. Required on the project node."@en .
+
+ibos:project-uuid a owl:DatatypeProperty ;
+    rdfs:label "project-uuid" ;
+    rdfs:range xsd:string ;
+    skos:definition "The project's UUID in iBOS. Optional."@en .
+
+# --- Rules --------------------------------------------------------------------
+# Run at activation together with Brick's own: a model may leave the types to
+# inference, as Brick's own examples do for Brick's reference types.
+
+ibos:ReferenceShape a sh:NodeShape ;
+    rdfs:label "iBOS reference by object UUID" ;
+    skos:definition "Types a node under ref:hasExternalReference that carries ibos:object-uuid as an ibos:Reference."@en ;
+    sh:targetObjectsOf ref:hasExternalReference ;
+    sh:rule [
+        a sh:TripleRule ;
+        sh:condition [
+            a sh:NodeShape ;
+            sh:property [ sh:path ibos:object-uuid ; sh:minCount 1 ]
+        ] ;
+        sh:subject sh:this ;
+        sh:predicate rdf:type ;
+        sh:object ibos:Reference
+    ] .
+
+ibos:ProjectShape a sh:NodeShape ;
+    rdfs:label "iBOS project by link" ;
+    skos:definition "Types the object of ibos:project as an ibos:Project."@en ;
+    sh:targetObjectsOf ibos:project ;
+    sh:rule [
+        a sh:TripleRule ;
+        sh:subject sh:this ;
+        sh:predicate rdf:type ;
+        sh:object ibos:Project
+    ] .

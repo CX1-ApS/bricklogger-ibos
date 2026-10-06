@@ -1,0 +1,6 @@
+# Development-only files stay out of the release archive that is published
+# to GitHub; the development history lives on Gitea.
+CLAUDE.md export-ignore
+notes/ export-ignore
+scripts/publish.sh export-ignore
+.claude/ export-ignore

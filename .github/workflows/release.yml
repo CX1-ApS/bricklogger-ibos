@@ -1,0 +1,97 @@
+# A release, from a version tag pushed by scripts/publish.sh: the test suite
+# against Bricklogger from PyPI first, then the wheel and sdist to PyPI and a
+# GitHub Release with them. Nothing is published before the suite passes.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  test:
+    # The workflow also lies in the development repository; it runs on GitHub only.
+    if: github.server_url == 'https://github.com'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      # Bricklogger from PyPI, not the sibling checkout tool.uv.sources names;
+      # the version this plugin needs is therefore released first. `uv run`
+      # would sync again with the sources, so it runs without syncing.
+      - run: uv sync --no-sources
+      - run: uv run --no-sync ruff format --check
+      - run: uv run --no-sync ruff check
+      - run: uv run --no-sync mypy
+      - run: uv run --no-sync pytest
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Check the tag against the version
+        run: |
+          version="$(uv version --short)"
+          [ "v${version}" = "${GITHUB_REF_NAME}" ] || {
+            echo "the tag ${GITHUB_REF_NAME} does not match version ${version}" >&2
+            exit 1
+          }
+      - run: uv build --no-sources --out-dir dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: uv publish --trusted-publishing always dist/*
+
+  github-release:
+    needs: pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          (cd dist && sha256sum ./* > SHA256SUMS)
+          # The release commit's body is the development tag's message.
+          git log -1 --format=%b > notes.md
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --title "bricklogger-ibos ${GITHUB_REF_NAME#v}" \
+            --notes-file notes.md \
+            --verify-tag
