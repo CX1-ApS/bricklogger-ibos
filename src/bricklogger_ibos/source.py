@@ -85,6 +85,7 @@ class RoundState:
 
     def __init__(self) -> None:
         self.failed: Exception | None = None
+        self.succeeded = False
 
 
 class IBOSSource(Source):
@@ -390,6 +391,9 @@ class ProjectFetcher:
         await asyncio.gather(*(one(fp) for fp in points))
         if isinstance(state.failed, Unauthorized):
             raise state.failed
+        if state.failed is None and state.succeeded:
+            # once per round, so the device's last success follows the rounds
+            self._report(reachable=True, round_done=True)
         return len(points)
 
     async def _fetch_point(self, fp: FetchPoint, state: RoundState) -> None:
@@ -401,6 +405,7 @@ class ProjectFetcher:
                 if fp.rejected:
                     return
             await self._fetch_samples(fp)
+            state.succeeded = True
             self._report(reachable=True)
         except NotFound:
             self._reject(fp, "the object is not in iBOS")
@@ -569,9 +574,13 @@ class ProjectFetcher:
         self.points.pop(fp.reference.point, None)
         self.source.reject(fp.reference.point, reason)
 
-    def _report(self, *, reachable: bool, error: str | None = None) -> None:
+    def _report(
+        self, *, reachable: bool, error: str | None = None, round_done: bool = False
+    ) -> None:
+        """Tell the status channel at a change, at an error, and at the end of
+        a round that succeeded, which is what keeps the last success current."""
         status = self.source.status
         changed = reachable != self.reachable
         self.reachable = reachable
-        if status is not None and (changed or error):
+        if status is not None and (changed or error or round_done):
             status.device(self.device, reachable=reachable, error=error)

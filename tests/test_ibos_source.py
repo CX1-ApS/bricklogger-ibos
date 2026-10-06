@@ -4,12 +4,14 @@ the request budget, and the tools."""
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import threading
 import time
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 import uvicorn
@@ -29,7 +31,7 @@ from pydantic import ValidationError
 from bricklogger_ibos.client import Unauthorized
 from bricklogger_ibos.config import IBOSConfig
 from bricklogger_ibos.declaration import SOURCE
-from bricklogger_ibos.source import IBOSSource
+from bricklogger_ibos.source import FetchPoint, IBOSSource, ProjectFetcher
 from bricklogger_ibos.tools import ProjectsParameters, ToolError
 from bricklogger_ibos.values import (
     convert,
@@ -887,3 +889,37 @@ def test_pages_follow_the_order_the_api_serves(
     finally:
         source.stop()
         thread.join(10)
+
+
+def test_every_round_that_succeeds_reports_the_project(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The project's last success follows the rounds. It was reported only
+    when reachability changed, so on a machine that never lost the cloud
+    `sources status` showed the first success for weeks."""
+    reports: list[tuple[str, bool]] = []
+
+    class Status:
+        def device(
+            self,
+            device: str,
+            *,
+            reachable: bool,
+            error: str | None = None,
+            skipped_rounds: int | None = None,
+        ) -> None:
+            reports.append((device, reachable))
+
+    interval = timedelta(minutes=5)
+    source = cast(IBOSSource, SimpleNamespace(status=Status()))
+    fetcher = ProjectFetcher(source, 4711)
+    point = SimpleNamespace(interval=interval, rejected=False, metadata_sent=True)
+    fetcher.points = {"p": cast(FetchPoint, point)}
+
+    async def fetched(fp: FetchPoint) -> None:
+        return None
+
+    monkeypatch.setattr(fetcher, "_fetch_samples", fetched)
+    asyncio.run(fetcher._round(interval))
+    asyncio.run(fetcher._round(interval))
+    assert reports == [("project-4711", True)] * 3, "the change, then every round"

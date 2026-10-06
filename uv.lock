@@ -123,7 +123,7 @@ wheels = [
 
 [[package]]
 name = "bricklogger"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "../bricklogger" }
 dependencies = [
     { name = "bacpypes3" },
@@ -177,7 +177,7 @@ dev = [
 
 [[package]]
 name = "bricklogger-ibos"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "bacpypes3" },
